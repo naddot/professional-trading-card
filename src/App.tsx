@@ -32,6 +32,9 @@ export default function App() {
   const cardRef = useRef<HTMLDivElement>(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  const [fullscreenAttempted, setFullscreenAttempted] = useState(false);
+  const [isInFullscreen, setIsInFullscreen] = useState(false);
 
   useEffect(() => {
     loadConfig().then((cfg) => {
@@ -44,7 +47,44 @@ export default function App() {
     });
   }, []);
 
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 640px)');
+
+    const update = () => setIsMobile(mq.matches);
+    update();
+
+    // Safari support: prefer addEventListener if available, fall back otherwise.
+    // `addListener/removeListener` aren't in TS's `MediaQueryList` typings, so we use `any`.
+    const mqAny = mq as any;
+
+    if (mqAny.addEventListener) {
+      mqAny.addEventListener('change', update);
+      return () => mqAny.removeEventListener('change', update);
+    }
+
+    if (mqAny.addListener) {
+      mqAny.addListener(update);
+      return () => mqAny.removeListener(update);
+    }
+  }, []);
+
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      const docAny = document as any;
+      const inFullscreen = !!document.fullscreenElement || !!docAny.webkitFullscreenElement;
+      setIsInFullscreen(inFullscreen);
+      if (!inFullscreen) setFullscreenAttempted(false);
+    };
+
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    onFullscreenChange();
+    return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
+  }, []);
+
   const CARD_CONFIG = config || DEFAULT_CONFIG;
+
+  const shouldShowFullscreenPrompt =
+    isMobile && !isInFullscreen && !isShareModalOpen;
 
   // Resolve "profile image" and "logo" from either:
   // - an external override URL (imagePublicUrl/logoPublicUrl), or
@@ -129,8 +169,51 @@ export default function App() {
   }, [x, y, config]);
 
   if (isLoading) {
-    return <div className="min-h-screen flex items-center justify-center bg-[#050505] text-zinc-500"><Loader2 className="w-8 h-8 animate-spin" /></div>;
+    return (
+      <div className="min-h-[100svh] min-h-[100dvh] flex items-center justify-center bg-[#050505] text-zinc-500">
+        <Loader2 className="w-8 h-8 animate-spin" />
+      </div>
+    );
   }
+
+  const requestImmersiveFullscreen = async () => {
+    const el = document.documentElement as any;
+    const docAny = document as any;
+    if (!document.fullscreenEnabled && !el.webkitRequestFullscreen) return;
+    if (document.fullscreenElement || docAny.webkitFullscreenElement) return;
+
+    try {
+      // Fullscreen can only be entered after a user gesture, so we call this from tap/click handlers.
+      const hideUiOptions = { navigationUI: 'hide' } as any; // Chrome/Edge option to hide browser UI
+
+      if (typeof el.requestFullscreen === 'function') {
+        await el.requestFullscreen(hideUiOptions);
+        return;
+      }
+
+      if (typeof el.webkitRequestFullscreen === 'function') {
+        await el.webkitRequestFullscreen();
+      }
+    } catch {
+      // Fullscreen may be blocked by the browser if not triggered by a user gesture.
+    }
+  };
+
+  const triggerFullscreen = async () => {
+    if (!isMobile) return;
+    if (isInFullscreen) return;
+    if (fullscreenAttempted) return;
+
+    setFullscreenAttempted(true);
+    await requestImmersiveFullscreen();
+
+    // If the browser blocks fullscreen, allow the user to try again shortly after.
+    setTimeout(() => {
+      if (!document.fullscreenElement && !(document as any).webkitFullscreenElement) {
+        setFullscreenAttempted(false);
+      }
+    }, 1500);
+  };
 
   // Handle Mouse Movement (Desktop)
   const handleMouseMove = (event: React.MouseEvent<HTMLDivElement>) => {
@@ -167,7 +250,7 @@ export default function App() {
   const style = ACCENT_MAP[CARD_CONFIG.theme.accentColor] || ACCENT_MAP.indigo;
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-[#050505] selection:bg-indigo-500/30 overflow-x-hidden">
+    <div className="min-h-[100svh] min-h-[100dvh] flex flex-col items-center justify-center p-0 sm:p-6 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] bg-[#050505] selection:bg-indigo-500/30 overflow-x-hidden">
       {isError && (
         <div className="fixed top-4 bg-red-500/10 text-red-500 px-4 py-2 rounded-full text-xs font-bold border border-red-500/20 z-50">
           Using default configuration
@@ -184,13 +267,50 @@ export default function App() {
       )}
 
       {/* Main Content */}
-      <main className="relative z-10 w-full max-w-md flex flex-col items-center gap-8 mt-16">
+      <main className="relative z-10 w-full max-w-md flex flex-col items-center gap-8 mt-0 sm:mt-16">
+        {shouldShowFullscreenPrompt && (
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => {
+              // Clicking the prompt is our required user gesture.
+              triggerFullscreen();
+            }}
+            onKeyDown={(e) => {
+              if (e.key !== 'Enter' && e.key !== ' ') return;
+              triggerFullscreen();
+            }}
+            className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 backdrop-blur-sm p-6"
+          >
+            <div className="text-center">
+              <div className="text-white text-sm font-semibold tracking-tight">
+                Tap to enter full screen
+              </div>
+              <div className="text-zinc-400 text-xs mt-2">
+                Chrome requires a tap to hide the browser UI.
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* The Card */}
         <div className="card-container w-full aspect-[2/3] max-w-[360px]">
           <motion.div
             ref={cardRef}
             onMouseMove={handleMouseMove}
             onMouseLeave={handleMouseLeave}
+            onClick={async (e) => {
+              // Only attempt fullscreen when the user taps the card background.
+              const targetEl = e.target as HTMLElement | null;
+              const isControl =
+                !!targetEl?.closest?.('a,button,input,textarea,select,[role="button"]');
+
+              if (!isMobile) return;
+              if (isInFullscreen) return;
+              if (isControl) return;
+
+              triggerFullscreen();
+            }}
             className="relative w-full h-full bg-[#121212] border border-white/10 shadow-2xl overflow-hidden group cursor-pointer isolate"
             style={{
               rotateX,
@@ -434,7 +554,7 @@ export default function App() {
       </AnimatePresence>
 
       {/* Footer */}
-      <footer className="relative z-10 mt-20 pb-12 text-center">
+      <footer className="relative z-10 mt-6 sm:mt-20 pb-0 sm:pb-12 text-center hidden sm:block">
         <p className="text-zinc-700 text-[10px] font-medium uppercase tracking-widest">
           {CARD_CONFIG.metadata.cardType}
         </p>
