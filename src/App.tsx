@@ -154,8 +154,12 @@ export default function App() {
     y.set(0);
   };
 
+  // Canonical page URL for QR/copy (origin + pathname avoids including query strings).
+  // This ensures GitHub Pages repo paths resolve correctly.
+  const pageUrl = `${window.location.origin}${window.location.pathname}`;
+
   const handleCopyLink = () => {
-    navigator.clipboard.writeText(window.location.href);
+    navigator.clipboard.writeText(pageUrl);
     setIsCopied(true);
     setTimeout(() => setIsCopied(false), 2000);
   };
@@ -393,7 +397,7 @@ export default function App() {
                 {/* QR Code */}
                 <div className="p-6 bg-white rounded-[2rem] shadow-xl">
                   <QRCodeCanvas 
-                    value={window.location.href} 
+                    value={pageUrl} 
                     size={200}
                     level="H"
                     includeMargin={false}
@@ -413,7 +417,7 @@ export default function App() {
                   <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-600 text-center">Profile Link</p>
                   <div className="flex items-center gap-2 p-2 bg-black/40 rounded-2xl border border-white/5">
                     <div className="flex-1 px-3 py-2 text-sm text-zinc-400 truncate font-mono">
-                      {window.location.href}
+                      {pageUrl}
                     </div>
                     <button 
                       onClick={handleCopyLink}
