@@ -1,0 +1,42 @@
+{
+  "profile": {
+    "name": "Your Name",
+    "role": "Your Role",
+    "bio": "Your short bio",
+    "image": "profile.jpg",
+    "imagePublicUrl": "https://storage.googleapis.com/YOUR_BUCKET/path/to/profile.jpg",
+    "logo": "logo.png",
+    "logoPublicUrl": "https://storage.googleapis.com/YOUR_BUCKET/path/to/logo.png",
+    "location": "Your address (optional)",
+    "email": "you@example.com",
+    "website": "https://example.com",
+    "phone": "+447700900123"
+  },
+  "features": {
+    "showSocialLinks": true,
+    "showQrCode": true,
+    "showDownloadButton": true,
+    "showCompanyLogo": true,
+    "enableGyroscope": true,
+    "enableHolographicEffect": true
+  },
+  "socials": {
+    "linkedin": "https://linkedin.com",
+    "github": "https://github.com"
+  },
+  "theme": {
+    "accentColor": "indigo",
+    "shimmerOpacity": 0.4,
+    "shimmerHoverOpacity": 0.6,
+    "cardRounding": "2rem",
+    "pageBackground": {
+      "enabled": true,
+      "type": "mesh",
+      "opacity": 0.15
+    }
+  },
+  "metadata": {
+    "cardType": "Digital Business Card"
+  }
+}
+

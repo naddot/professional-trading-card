@@ -1,0 +1,20 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+
+# Personal/business card details (generated at deploy time)
+public/config.json
+public/assets/*.vcf
+# Local images/logos in `public/assets/` can be personal; keep them out of git by default.
+public/assets/*.png
+public/assets/*.jpg
+public/assets/*.jpeg
+public/assets/*.webp
+public/assets/*.gif
+public/assets/*.svg
+public/assets/*.ico
