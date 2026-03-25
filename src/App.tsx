@@ -35,6 +35,9 @@ export default function App() {
   const [isMobile, setIsMobile] = useState(false);
   const [fullscreenAttempted, setFullscreenAttempted] = useState(false);
   const [isInFullscreen, setIsInFullscreen] = useState(false);
+  // `QRCodeCanvas` will stretch the embedded image to `width`/`height` if it's not square.
+  // We pre-crop to a square (center-crop / "cover") to preserve aspect ratio.
+  const [qrCenterImageSrc, setQrCenterImageSrc] = useState<string | null>(null);
 
   useEffect(() => {
     loadConfig().then((cfg) => {
@@ -168,6 +171,31 @@ export default function App() {
     return () => window.removeEventListener('deviceorientation', handleOrientation);
   }, [x, y, config]);
 
+  useEffect(() => {
+    // Only crop when the QR modal is visible; avoids unnecessary work.
+    if (!isShareModalOpen) return;
+
+    const targetPx = 40; // Must match `imageSettings.width/height`.
+    let cancelled = false;
+
+    // Show something immediately while we crop.
+    setQrCenterImageSrc(profileImageSrc);
+
+    (async () => {
+      try {
+        const cropped = await cropImageToSquareDataUrl(profileImageSrc, targetPx);
+        if (!cancelled) setQrCenterImageSrc(cropped);
+      } catch {
+        // If CORS prevents exporting the cropped image, keep the original (worst-case: stretching).
+        if (!cancelled) setQrCenterImageSrc(profileImageSrc);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isShareModalOpen, profileImageSrc]);
+
   if (isLoading) {
     return (
       <div className="min-h-[100svh] min-h-[100dvh] flex items-center justify-center bg-[#050505] text-zinc-500">
@@ -240,6 +268,42 @@ export default function App() {
   // Canonical page URL for QR/copy (origin + pathname avoids including query strings).
   // This ensures GitHub Pages repo paths resolve correctly.
   const pageUrl = `${window.location.origin}${window.location.pathname}`;
+
+  async function cropImageToSquareDataUrl(src: string, targetPx: number): Promise<string> {
+    // If the image fails to load or CORS blocks canvas export, we fall back to the original.
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error('Failed to load image for QR crop'));
+      img.src = src;
+    });
+
+    const srcW = img.naturalWidth || img.width;
+    const srcH = img.naturalHeight || img.height;
+
+    if (!srcW || !srcH) throw new Error('Invalid image dimensions for QR crop');
+
+    // Center-crop to a square, like CSS `object-fit: cover`.
+    const side = Math.min(srcW, srcH);
+    const sx = Math.floor((srcW - side) / 2);
+    const sy = Math.floor((srcH - side) / 2);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = targetPx;
+    canvas.height = targetPx;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Failed to create 2d context for QR crop');
+
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+
+    ctx.drawImage(img, sx, sy, side, side, 0, 0, targetPx, targetPx);
+
+    // PNG is broadly supported and avoids quality loss from JPEG re-encoding.
+    return canvas.toDataURL('image/png');
+  }
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(pageUrl);
@@ -522,7 +586,7 @@ export default function App() {
                     level="H"
                     includeMargin={false}
                     imageSettings={{
-                      src: profileImageSrc,
+                      src: qrCenterImageSrc ?? profileImageSrc,
                       x: undefined,
                       y: undefined,
                       height: 40,
